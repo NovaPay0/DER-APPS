@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>لوحة التحكم | DER-APPS</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0d1124;color:#f2f4ff;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:20px}
+.wrap{max-width:640px;margin:auto}
+h1{background:linear-gradient(90deg,#7c6cff,#00d4ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+input,select,textarea{width:100%;padding:11px;margin:5px 0 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:inherit;font-size:1rem;font-family:inherit}
+label{font-size:.85rem;color:#9aa3c7}
+button{padding:12px 18px;border-radius:10px;border:0;background:linear-gradient(135deg,#7c6cff,#00d4ff);color:#fff;font-weight:700;cursor:pointer;font-size:1rem}
+.card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:18px;margin-bottom:18px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.it{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.it button{background:#ff4f7b;padding:8px 14px}
+.good{color:#4ade80}.bad{color:#ff6b8a}
+#msg{margin:10px 0;min-height:1.4em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>لوحة تحكم DER-APPS</h1>
+  <div id="msg"></div>
+  <div id="login" hidden class="card"><button id="g">تسجيل الدخول بـ Google</button></div>
+  <div id="panel" hidden>
+    <p><small id="who"></small> <button id="out" style="padding:6px 12px;font-size:.8rem">خروج</button></p>
+    <form id="f" class="card">
+      <h3>إضافة تطبيق</h3>
+      <label>الاسم *</label><input id="name" required>
+      <label>الوصف</label><textarea id="desc" rows="2"></textarea>
+      <div class="row">
+        <div><label>الإصدار</label><input id="ver" value="1.0"></div>
+        <div><label>النظام</label><select id="os"><option>Android</option><option>Windows</option><option>iOS</option><option>macOS</option><option>Linux</option></select></div>
+        <div><label>التصنيف</label><input id="cat" placeholder="ألعاب / أدوات / برامج"></div>
+        <div><label>الإيموجي</label><input id="emoji" value="📦"></div>
+        <div><label>اللون</label><input id="color" type="color" value="#7c6cff"></div>
+        <div><label>الحجم (للروابط الخارجية)</label><input id="size" placeholder="اختياري"></div>
+      </div>
+      <label>ملف التطبيق (APK / EXE / ZIP ...) — حتى 50MB في الخطة المجانية</label><input id="file" type="file">
+      <label>أو رابط تحميل خارجي</label><input id="ext" placeholder="https://...">
+      <label>أيقونة (صورة، اختياري)</label><input id="icon" type="file" accept="image/*">
+      <label><input id="hot" type="checkbox" style="width:auto;margin:0 0 0 8px"> علامة "رائج"</label><br><br>
+      <button id="btn" type="submit">رفع ونشر</button>
+    </form>
+    <div class="card"><h3>التطبيقات الحالية</h3><div id="list"></div></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://iowrgaemmlmlvncvdtbk.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_xOf-1qLdZSIT8e4-9RnYJw_ZUzAMgJg";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ok=!SUPABASE_URL.includes('YOUR-PROJECT');
+const sb=ok?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
+function say(t,bad){const m=$('msg');m.textContent=t;m.className=bad?'bad':'good'}
+function fmtSize(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'}
+const clean=n=>n.replace(/[^\w.\-]+/g,'_');
+
+async function check(user){
+  $('login').hidden=!!user;$('panel').hidden=true;
+  if(!user)return;
+  const {data,error}=await sb.from('admins').select('user_id').eq('user_id',user.id).maybeSingle();
+  if(error||!data){say('هذا الحساب ليس مسؤولاً. أضفه إلى جدول admins (انظر README).',true);return}
+  say('');$('panel').hidden=false;$('who').textContent=user.email;list()}
+
+if(!ok)say('أكمل إعداد Supabase أولاً (انسخ URL والمفتاح).',true);
+else{$('login').hidden=false;sb.auth.onAuthStateChange((_e,s)=>setTimeout(()=>check(s?.user||null),0))}
+$('g').onclick=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});
+$('out').onclick=()=>sb.auth.signOut();
+
+async function list(){
+  const {data}=await sb.from('apps').select('*').order('created_at',{ascending:false});
+  $('list').innerHTML=(data||[]).map(a=>`<div class="it"><span>${esc(a.emoji)} ${esc(a.name)} <small>(${a.downloads||0} ⬇)</small></span><button data-del="${a.id}" data-fp="${esc(a.file_path||'')}">حذف</button></div>`).join('')||'<p>لا توجد تطبيقات بعد.</p>';
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('حذف التطبيق نهائياً؟'))return;
+    if(b.dataset.fp)await sb.storage.from('apps').remove([b.dataset.fp]);
+    const {error}=await sb.from('apps').delete().eq('id',b.dataset.del);
+    if(error)say(error.message,true);else{say('تم الحذف');list()}})}
+
+$('f').onsubmit=async e=>{
+  e.preventDefault();const btn=$('btn');btn.disabled=true;say('جارٍ الرفع...');
+  try{
+    const f=$('file').files[0],ext=$('ext').value.trim();
+    if(!f&&!ext)throw new Error('ارفع ملفاً أو ضع رابطاً خارجياً');
+    if(ext&&!/^https?:\/\//i.test(ext))throw new Error('الرابط يجب أن يبدأ بـ https://');
+    let file_path=null,size=$('size').value.trim()||null;
+    if(f){file_path=Date.now()+'-'+clean(f.name);
+      const {error}=await sb.storage.from('apps').upload(file_path,f,{contentType:f.type||'application/octet-stream'});
+      if(error)throw error;size=fmtSize(f.size)}
+    let icon_url=null;const ic=$('icon').files[0];
+    if(ic){const p='icons/'+Date.now()+'-'+clean(ic.name);
+      const {error}=await sb.storage.from('apps').upload(p,ic,{contentType:ic.type});
+      if(error)throw error;icon_url=sb.storage.from('apps').getPublicUrl(p).data.publicUrl}
+    const {error}=await sb.from('apps').insert({name:$('name').value.trim(),description:$('desc').value.trim(),version:$('ver').value.trim(),size,os:$('os').value,category:$('cat').value.trim(),emoji:$('emoji').value.trim()||'📦',color:$('color').value,icon_url,file_path,external_url:ext||null,hot:$('hot').checked});
+    if(error)throw error;
+    say('✅ تم نشر التطبيق');$('f').reset();list();
+  }catch(err){say(err.message||'حدث خطأ',true)}
+  btn.disabled=false};
+</script>
+</body>
+</html>
